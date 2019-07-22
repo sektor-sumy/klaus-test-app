@@ -2,6 +2,7 @@
 
 namespace App\Command;
 
+use App\Service\Language;
 use GuzzleHttp\Client;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -10,15 +11,12 @@ use Symfony\Component\Console\Output\OutputInterface;
 
 class CheckLanguageCommand extends Command
 {
-    private $client;
+    protected $language;
 
-    const API_URL = 'https://restcountries.eu/rest/v2/';
-
-    public function __construct()
+    public function __construct(Language $language)
     {
-        $this->client = new Client(['base_uri' => self::API_URL]);
-
         parent::__construct();
+        $this->language = $language;
     }
 
     protected function configure()
@@ -42,19 +40,9 @@ class CheckLanguageCommand extends Command
         $countries = $input->getArgument('countries');
         try {
             if (count($countries) > 1) {
-                $result = $this->showMessageForMultipleCountries($countries);
-                if (!empty($result)) {
-                    $output->writeln(implode(' and ', $countries).' speak the same language.');
-                } else {
-                    $output->writeln(implode(' and ', $countries).' do not speak the same language.');
-                }
+                $this->showMessageForMultipleCountries($countries, $output);
             } else {
-                $lang = $this->getLangByNameCountry($countries[0]);
-                $output->writeln('Country language code: '.$lang);
-                $countriesWithCurrentLang = $this->getCountriesByLang($lang);
-                if (!empty($countriesWithCurrentLang)) {
-                    $output->writeln($countries[0].' speaks same language with these countries: '.implode(', ', $countriesWithCurrentLang));
-                }
+                $this->showMessageForOneCountry($countries[0], $output);
             }
         } catch (\Exception $e) {
             $output->writeln('Something went wrong! '.$e->getMessage());
@@ -62,80 +50,40 @@ class CheckLanguageCommand extends Command
     }
 
     /**
-     * @param array $countries
-     *
-     * @return mixed
+     * @param array           $countries
+     * @param OutputInterface $output
      *
      * @throws \Exception
      */
-    private function showMessageForMultipleCountries(array $countries)
+    private function showMessageForMultipleCountries(array $countries, OutputInterface $output)
     {
         $languages = [];
         foreach ($countries as $country) {
-            $languages[] = $this->getLanguagesByNameCountry($country);
+            $languages[] = $this->language->getLanguagesCodeByNameCountry($country);
         }
 
-        return call_user_func_array('array_intersect', $languages);
+        $matches = call_user_func_array('array_intersect', $languages);
+
+        if (!empty($matches)) {
+            $output->writeln(implode(' and ', $countries).' speak the same language.');
+        } else {
+            $output->writeln(implode(' and ', $countries).' do not speak the same language.');
+        }
     }
 
     /**
-     * @param string $country
-     *
-     * @return mixed
+     * @param string          $country
+     * @param OutputInterface $output
      *
      * @throws \Exception
      */
-    private function getLangByNameCountry(string $country)
+    private function showMessageForOneCountry(string $country, OutputInterface $output)
     {
-        $res = $this->client->request('GET', 'name/'.$country);
-        if ($res->getStatusCode() === 200) {
-            $arrayResult = json_decode($res->getBody()->getContents(), true);
-            $lang = $arrayResult[0]['languages'][0]['iso639_1'];
-
-            return $lang;
+        $lang = $this->language->getLangCodeByNameCountry($country);
+        $output->writeln('Country language code: '.$lang);
+        $countriesWithCurrentLang = $this->language->getCountriesByLang($lang);
+        if (!empty($countriesWithCurrentLang)) {
+            $output->writeln($country.' speaks same language with these countries: '.implode(', ', $countriesWithCurrentLang));
         }
-
-        throw new \Exception('Country not found');
-    }
-
-    /**
-     * @param string $lang
-     *
-     * @return array
-     */
-    private function getCountriesByLang(string $lang)
-    {
-        $countriesWithCurrentLang = [];
-        $res2 = $this->client->request('GET', 'lang/'.$lang);
-        $arrayResult2 = json_decode($res2->getBody()->getContents(), true);
-
-        foreach ($arrayResult2 as $res2) {
-            $countriesWithCurrentLang[] = $res2['name'];
-        }
-
-        return $countriesWithCurrentLang;
-    }
-
-    /**
-     * @param string $country
-     *
-     * @return mixed
-     *
-     * @throws \Exception
-     */
-    private function getLanguagesByNameCountry(string $country)
-    {
-        $langs = [];
-        $res = $this->client->request('GET', 'name/' . $country.'?fullText=true');
-        if ($res->getStatusCode() === 200) {
-            $arrayResult = json_decode($res->getBody()->getContents(), true);
-            foreach ($arrayResult[0]['languages'] as $lang) {
-                $langs[] = $lang['iso639_1'];
-            }
-
-            return $langs;
-        }
-
-        throw new \Exception('Country not found');
     }
 }

@@ -2,19 +2,22 @@
 namespace App\Tests\Util;
 
 use App\Command\CheckLanguageCommand;
-use PHPUnit\Framework\TestCase;
+use App\Service\Language;
+use Symfony\Bundle\FrameworkBundle\Test\WebTestCase;
 use Symfony\Component\Console\Application;
 use Symfony\Component\Console\Tester\CommandTester;
 
-class CheckLanguageCommandTest extends TestCase
+class CheckLanguageCommandTest extends WebTestCase
 {
     /** @var CommandTester */
     private $commandTester;
 
     protected function setUp()
     {
+        $kernel = self::bootKernel();
+        $languageService = $kernel->getContainer()->get(Language::class);
         $application = new Application();
-        $application->add(new CheckLanguageCommand());
+        $application->add(new CheckLanguageCommand($languageService));
         $command = $application->find('app:check-language');
         $this->commandTester = new CommandTester($command);
     }
